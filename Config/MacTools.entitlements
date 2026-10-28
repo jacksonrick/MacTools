@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- SoulverCore 以二进制 XCFramework 分发、由第三方签名；
+	     保留 Hardened Runtime 的同时必须关闭库校验，否则 dlopen 会被拒绝。
+	     改用自有 Developer ID 重新签名该 framework 后，可移除此项。 -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- 翻译 API（汇率数据源已下线，暂不需要联网场景） -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

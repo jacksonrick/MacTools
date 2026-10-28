@@ -1,0 +1,24 @@
+{
+  "originHash" : "e4685c7ece93a9e92267055415fde8a5cf57339aeefb0996830420875d9763ef",
+  "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift.git",
+      "state" : {
+        "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
+        "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "soulvercore",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/soulverteam/SoulverCore.git",
+      "state" : {
+        "revision" : "2c85dc7dc4dfac947058f6d9ba2aaae7e3910a59",
+        "version" : "2.7.1"
+      }
+    }
+  ],
+  "version" : 3
+}
