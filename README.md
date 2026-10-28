@@ -87,7 +87,7 @@
 没有预编译的发布包，需要自行从源码构建。
 
 ```sh
-git clone https://github.com/YOUR_NAME/MacTools.git
+git clone https://github.com/jacksonrick/MacTools.git
 cd MacTools
 
 ./scripts/make-signing-identity.sh   # 一次性：本地自签代码签名身份（强烈建议，见下文）
