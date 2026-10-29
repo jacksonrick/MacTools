@@ -31,9 +31,20 @@ enum DebugSelfTest {
 
         print("\n=== SELFTEST START ===")
 
-        // 1. 唤起：工具条可见，未激活任何功能
+        // 「默认展示」是用户可配置项，会改变 open() 的落点。自检的主体断言都假设从工具条
+        // 开始，所以开场临时置空，结束前还原（13d 段会单独验证这个功能本身）。
+        let savedDefaultModule = environment.settings.defaultModule
+        environment.settings.defaultModule = nil
+
+        // 1. 唤起：从工具条开始。
+        // 用户可能设了「默认展示」，唤起会直接进入某个模块；自检不依赖也不改动该设置，
+        // 先按 Esc 归位到工具条，后续断言才有确定性起点。
         router.open()
         await settle()
+        if case .module = router.level {
+            _ = router.handle(.escape)
+            await settle(0.05)
+        }
         expect("open → level = bar（未激活功能）", router.level == .bar)
         expect("open → panel visible", panel.isVisible)
         expect("open → panel is key", panel.isKeyWindow)
@@ -196,17 +207,22 @@ enum DebugSelfTest {
         await settle(0.1)
         expect("恢复普通求值后提示清除", environment.calculator.unsupportedReason == nil)
 
-        // 13. 历史模式
+        // 13. 历史模式：↓ 调出，↓ 往更旧翻、↑ 回到更新，按键方向与高亮移动一致
         environment.calculationHistory.add(expression: "1+1", result: "2")
-        expect("↑ 进入历史", router.handle(.arrowUp) && environment.calculator.mode == .history)
+        expect("↓ 进入历史", router.handle(.arrowDown) && environment.calculator.mode == .history)
         expect("历史游标停在最新一条", environment.calculator.historyIndex == 0)
-        _ = router.handle(.arrowUp)
-        expect("↑ 连按往更旧翻",
-               environment.calculator.mode == .history && environment.calculator.historyIndex == 1)
         _ = router.handle(.arrowDown)
-        expect("↓ 回到更新一条", environment.calculator.historyIndex == 0)
+        expect("↓ 连按往更旧翻",
+               environment.calculator.mode == .history && environment.calculator.historyIndex == 1)
+        _ = router.handle(.arrowUp)
+        expect("↑ 回到更新一条", environment.calculator.historyIndex == 0)
+        expect("↑ 在最新一条再按退出历史",
+               router.handle(.arrowUp) && environment.calculator.mode == .editing)
+        expect("编辑态 ↑ 不进历史",
+               router.handle(.arrowUp) && environment.calculator.mode == .editing)
 
         // 历史里回车 = 直接键入到光标处，不回填输入框
+        _ = router.handle(.arrowDown)
         let expressionBeforeHistoryEnter = router.calcExpression
         _ = router.handle(.enter)
         await settle(0.35)
@@ -217,7 +233,7 @@ enum DebugSelfTest {
         router.open(at: .calculator)
         await settle(0.15)
         expect("Esc 退出历史但不返回扇表",
-               router.handle(.arrowUp)
+               router.handle(.arrowDown)
                && router.handle(.escape)
                && environment.calculator.mode == .editing
                && router.level == .module(.calculator))
@@ -247,10 +263,10 @@ enum DebugSelfTest {
         router.open(at: .translation)
         await settle(0.15)
         if environment.translationHistory.records.isEmpty {
-            expect("历史为空时 ↑ 不进入历史",
-                   router.handle(.arrowUp) && environment.translation.mode == .editing)
+            expect("历史为空时 ↓ 不进入历史",
+                   router.handle(.arrowDown) && environment.translation.mode == .editing)
         } else {
-            expect("翻译 ↑ 进入历史", router.handle(.arrowUp) && environment.translation.mode == .history)
+            expect("翻译 ↓ 进入历史", router.handle(.arrowDown) && environment.translation.mode == .history)
             expect("翻译 Esc 退出历史",
                    router.handle(.escape)
                    && environment.translation.mode == .editing
@@ -915,6 +931,9 @@ enum DebugSelfTest {
         // 不在这里真的申请授权：会弹出系统面板打断自动化。
         expect("屏幕录制状态查询无副作用",
                permissions.hasScreenRecording == CGPreflightScreenCaptureAccess())
+
+        // 还原用户的「默认展示」设置。必须在 exit 之前显式做 —— exit() 不会执行 defer。
+        environment.settings.defaultModule = savedDefaultModule
 
         // 汇总
         print("=== SELFTEST \(failures.isEmpty ? "PASSED" : "FAILED") (\(checks - failures.count)/\(checks)) ===")

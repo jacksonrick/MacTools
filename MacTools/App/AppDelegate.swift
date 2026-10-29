@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         )
                     }
                     environment.router.open(at: .translation)
-                    _ = environment.translation.handle(.arrowUp, router: environment.router)
+                    _ = environment.translation.handle(.arrowDown, router: environment.router)
                 case "calculator": environment.router.open(at: .calculator, seed: "23*4")
                 case "screenshot": environment.router.open(at: .screenshot)
                 case "settings":

@@ -58,19 +58,21 @@ final class CalculatorController: ModuleControlling {
 
     func handle(_ key: HUDKey, router: HUDRouter) -> Bool {
         switch key {
-        case .arrowUp:
+        case .arrowDown:
             if mode == .editing {
                 guard !history.records.isEmpty else { return true }
                 mode = .history
                 historyIndex = 0
                 return true
             }
-            // 往上 = 更旧；翻到底停住，不回绕。
+            // 列表自上而下是「新 → 旧」，所以「往下按」= 高亮往下走 = 翻到更旧的一条；
+            // 翻到底停住，不回绕。
             historyIndex = min(historyIndex + 1, max(history.records.count - 1, 0))
             return true
 
-        case .arrowDown:
+        case .arrowUp:
             guard mode == .history else { return true }
+            // 高亮已经在最上面（最新一条）时再往上按 = 退出历史，回到输入框。
             if historyIndex == 0 {
                 mode = .editing
                 return true

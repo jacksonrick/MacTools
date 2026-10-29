@@ -27,7 +27,7 @@ struct CalculatorModuleView: View {
     }
 
     private var cardHint: String {
-        controller.mode == .history ? "↩ 键入结果 · Esc 退出历史" : "↩ 键入结果 · ↑ 显示历史"
+        controller.mode == .history ? "↩ 键入结果 · ↑↓ 选择 · Esc 退出历史" : "↩ 键入结果 · ↓ 显示历史"
     }
 
     // MARK: 编辑
@@ -74,7 +74,7 @@ struct CalculatorModuleView: View {
             .frame(height: 1)
     }
 
-    /// 最近计算（只读概览，↑ 进入完整历史）。
+    /// 最近计算（只读概览，↓ 进入完整历史）。
     private var recentList: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("最近")

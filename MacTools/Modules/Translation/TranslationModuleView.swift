@@ -36,9 +36,9 @@ struct TranslationModuleView: View {
     }
 
     private var cardHint: String {
-        if controller.mode == .history { return "↩ 键入译文 · Esc 退出历史" }
-        if controller.canReadTranslation { return "↩ 键入译文 · ↑ 历史 · ⌘L 切换语言" }
-        return "↩ 翻译 · ↑ 历史 · ⌘L 切换语言 · Esc 返回"
+        if controller.mode == .history { return "↩ 键入译文 · ↑↓ 选择 · Esc 退出历史" }
+        if controller.canReadTranslation { return "↩ 键入译文 · ↓ 历史 · ⌘L 切换语言" }
+        return "↩ 翻译 · ↓ 历史 · ⌘L 切换语言 · Esc 返回"
     }
 
     // MARK: 历史
