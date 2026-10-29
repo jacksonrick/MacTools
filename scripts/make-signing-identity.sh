@@ -42,14 +42,14 @@ exists() {
 }
 
 if exists && [[ "$FORCE" == "0" ]]; then
-  echo "已存在签名身份「$IDENTITY_NAME」，无需重复创建。"
+  echo "已存在签名身份「${IDENTITY_NAME}」，无需重复创建。"
   security find-identity -p codesigning | grep "\"$IDENTITY_NAME\""
   echo "（列表里的 CSSMERR_TP_NOT_TRUSTED 是自签证书的正常状态，不影响签名。）"
   exit 0
 fi
 
 if exists && [[ "$FORCE" == "1" ]]; then
-  echo "删除旧的「$IDENTITY_NAME」…"
+  echo "删除旧的「${IDENTITY_NAME}」…"
   # 私钥与证书都删，避免同名但密钥不匹配的僵尸条目。
   security delete-identity -c "$IDENTITY_NAME" "$KEYCHAIN" >/dev/null 2>&1 || true
 fi
@@ -78,7 +78,7 @@ extendedKeyUsage       = critical,codeSigning
 subjectKeyIdentifier   = hash
 CONF
 
-echo "生成自签名证书（$IDENTITY_NAME，10 年）…"
+echo "生成自签名证书（${IDENTITY_NAME}，10 年）…"
 openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
   -keyout "$WORK/key.pem" -out "$WORK/cert.pem" \
   -config "$WORK/openssl.cnf" 2>/dev/null

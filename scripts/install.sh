@@ -78,13 +78,15 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
   echo "签名：ad-hoc（cdhash 每次都变，TCC 授权会随重装失效）"
   echo "      想一劳永逸：./scripts/make-signing-identity.sh"
 else
-  echo "签名：$SIGN_IDENTITY（指定要求与 cdhash 无关，授权可跨构建保留）"
+  # 花括号是必需的：本脚本的 shebang 是 bash，而 macOS 自带的 bash 3.2 会把紧随
+  # 变量名的多字节字符首字节并入变量名（zsh 不会），`set -u` 下直接 unbound 报错。
+  echo "签名：${SIGN_IDENTITY}（指定要求与 cdhash 无关，授权可跨构建保留）"
 fi
 xattr -cr "$DEST"
 codesign --force --deep --sign "$SIGN_IDENTITY" "$DEST"
 
 if [[ "$RESET_PERMISSION" == "1" ]]; then
-  echo "重置屏幕录制授权记录（$BUNDLE_ID）…"
+  echo "重置屏幕录制授权记录（${BUNDLE_ID}）…"
   tccutil reset ScreenCapture "$BUNDLE_ID" || true
 fi
 
