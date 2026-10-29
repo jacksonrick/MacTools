@@ -18,6 +18,7 @@ final class SettingsStore {
         static let maxClipBytes = "clip.maxClipBytes"
         static let keywords = "hud.keywords"
         static let hotkeys = "hud.hotkeys"
+        static let defaultModule = "hud.defaultModule"
         static let launchAtLogin = "general.launchAtLogin"
         static let menuBarIcon = "general.menuBarIcon"
         static let engine = "translation.engine"
@@ -85,6 +86,19 @@ final class SettingsStore {
         didSet { saveHotkeys() }
     }
 
+    /// 唤起浮窗时直接激活的功能；`nil` = 只显示工具条（旧行为）。
+    var defaultModule: ModuleID? {
+        didSet {
+            persist(Key.defaultModule) { [database, defaultModule] in
+                database.setString(defaultModule?.rawValue, forKey: Key.defaultModule)
+            }
+        }
+    }
+
+    /// 可设为默认激活项的功能。截图不在其中：它的激活态只是一句「按 ↩ 开始截图」的提示，
+    /// 唤起后直接停在截图模块没有意义。
+    static let defaultModuleOptions: [ModuleID] = [.clipboard, .translation, .calculator]
+
     var launchAtLogin: Bool {
         didSet {
             persist(Key.launchAtLogin) { [database, launchAtLogin] in
@@ -136,7 +150,14 @@ final class SettingsStore {
     init(database: AppDatabase) {
         self.database = database
 
-        let savedMax = database.int(forKey: Key.maxClips) ?? 500
+        var savedMax = database.int(forKey: Key.maxClips) ?? 1000
+        // 一次性迁移：旧版本默认 500，现在统一提到 1000。只跑一次并写标记，
+        // 之后用户手动调小不会被下次启动又改回去。
+        let migratedKey = "meta.maxClipsMigrated1000"
+        if database.bool(forKey: migratedKey) != true {
+            if savedMax < 1000 { savedMax = 1000 }
+            database.setBool(true, forKey: migratedKey)
+        }
         maxClips = min(max(savedMax, Self.defaultsRange.maxClips.lowerBound), Self.defaultsRange.maxClips.upperBound)
 
         let savedDisplay = database.int(forKey: Key.displayCount) ?? 50
@@ -147,6 +168,7 @@ final class SettingsStore {
 
         keywords = Self.loadKeywords(from: database)
         hotkeys = Self.loadHotkeys(from: database)
+        defaultModule = database.string(forKey: Key.defaultModule).flatMap(ModuleID.init(rawValue:))
 
         launchAtLogin = database.bool(forKey: Key.launchAtLogin) ?? false
         menuBarIconMode = MenuBarIconMode(rawValue: database.string(forKey: Key.menuBarIcon) ?? "") ?? .symbol
@@ -259,8 +281,11 @@ final class SettingsStore {
     }
 
     private func saveHotkeys() {
-        let raw = hotkeys.reduce(into: [String: HotkeyManager.Shortcut]()) { partial, item in
-            partial[item.key.rawValue] = item.value
+        // 值为 null 表示「用户主动清空了这个入口」，必须与「从未设置过」区分开：
+        // 否则重启后 loadHotkeys 会把默认值又补回来，用户怎么删都删不掉。
+        var raw: [String: HotkeyManager.Shortcut?] = [:]
+        for action in HotkeyManager.Action.allCases {
+            raw.updateValue(hotkeys[action], forKey: action.rawValue)
         }
         guard let data = try? JSONEncoder().encode(raw) else { return }
         persist(Key.hotkeys) { [database] in database.setData(data, forKey: Key.hotkeys) }
@@ -285,17 +310,18 @@ final class SettingsStore {
 
     private static func loadHotkeys(from database: AppDatabase) -> [HotkeyManager.Action: HotkeyManager.Shortcut] {
         guard let data = database.data(forKey: Key.hotkeys),
-              let raw = try? JSONDecoder().decode([String: HotkeyManager.Shortcut].self, from: data) else {
+              let raw = try? JSONDecoder().decode([String: HotkeyManager.Shortcut?].self, from: data) else {
             return defaultShortcuts
         }
         var result: [HotkeyManager.Action: HotkeyManager.Shortcut] = [:]
-        for (key, value) in raw {
-            if let action = HotkeyManager.Action(rawValue: key) {
-                result[action] = value
+        for action in HotkeyManager.Action.allCases {
+            guard let stored = raw[action.rawValue] else {
+                // 旧数据里没有这个入口（新增的剪贴板 / 计算器），按默认值补。
+                if let fallback = defaultShortcuts[action] { result[action] = fallback }
+                continue
             }
-        }
-        for action in HotkeyManager.Action.allCases where result[action] == nil {
-            result[action] = defaultShortcuts[action]
+            // 显式 null = 用户清空过，保持未绑定。
+            if let shortcut = stored { result[action] = shortcut }
         }
         return result
     }

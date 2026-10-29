@@ -53,6 +53,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch state {
                 case "clipboard": environment.router.open(at: .clipboard)
                 case "translation": environment.router.open(at: .translation, seed: "Hello, world.")
+                case "translation-history":
+                    // 抓历史列表版式用。假记录写进当前库——排查时配合
+                    // CFFIXED_USER_HOME=/tmp/... 跑，避免污染真实历史。
+                    let samples = [
+                        ("Hello, world.", "你好，世界。"),
+                        ("Good morning.", "早上好。"),
+                        ("How are you today?", "你今天好吗？"),
+                        ("The quick brown fox jumps over the lazy dog.", "敏捷的棕色狐狸跳过了懒狗。"),
+                    ]
+                    for (source, translated) in samples {
+                        environment.translationHistory.add(
+                            source: source,
+                            translated: translated,
+                            targetLanguage: "zh-CHS"
+                        )
+                    }
+                    environment.router.open(at: .translation)
+                    _ = environment.translation.handle(.arrowUp, router: environment.router)
                 case "calculator": environment.router.open(at: .calculator, seed: "23*4")
                 case "screenshot": environment.router.open(at: .screenshot)
                 case "settings":

@@ -52,7 +52,7 @@ struct SettingsRootView: View {
                 .frame(width: 1)
             detail
         }
-        .frame(minWidth: 720, minHeight: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -65,9 +65,9 @@ struct SettingsRootView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 14)
-        .frame(width: 196, alignment: .top)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
+        .frame(width: 156, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(.ultraThinMaterial)
     }
@@ -152,31 +152,17 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Section("快捷键") {
-                ForEach(HotkeyManager.Action.allCases, id: \.self) { action in
-                    HStack {
-                        Text(action.displayName)
-                        Spacer()
-                        ShortcutRecorder(
-                            shortcut: binding(for: action),
-                            onCommit: { newValue in
-                                try environment.applyShortcut(action, shortcut: newValue)
-                            },
-                            onClear: {
-                                try? environment.applyShortcut(action, shortcut: nil)
-                            }
-                        )
-                        .frame(width: 156, height: 40)
-                        softHint(for: action)
-                            .frame(width: 176, alignment: .leading)
+            Section("通用") {
+                Picker("默认展示", selection: defaultModuleBinding) {
+                    Text("仅工具条").tag(ModuleID?.none)
+                    ForEach(SettingsStore.defaultModuleOptions, id: \.self) { module in
+                        Text(module.title).tag(ModuleID?.some(module))
                     }
                 }
-                Text("录制时需按下至少一个修饰键；Esc 取消，Delete 清空（禁用该入口）。")
+                Text("按 ⌥Space 唤起时直接停在选中的功能上，省掉一次 Tab。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            Section("启动") {
                 Toggle("登录时启动", isOn: Binding(
                     get: { settings.launchAtLogin },
                     set: { newValue in
@@ -195,8 +181,63 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            Section("快捷键") {
+                ForEach(HotkeyManager.Action.allCases, id: \.self) { action in
+                    HStack {
+                        Text(action.displayName)
+                        Spacer()
+                        ShortcutRecorder(
+                            shortcut: binding(for: action),
+                            onCommit: { newValue in
+                                try environment.applyShortcut(action, shortcut: newValue)
+                            },
+                            onClear: {
+                                try? environment.applyShortcut(action, shortcut: nil)
+                            }
+                        )
+                        .frame(width: 156, height: 40)
+                        softHint(for: action)
+                            .frame(width: 170, alignment: .leading)
+                    }
+                }
+                Text("录制时需按下至少一个修饰键；Esc 取消，Delete 清空（禁用该入口）。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("数据") {
+                ClearHistoryRow(
+                    title: "清空剪贴板历史…",
+                    confirmTitle: "确定清空全部剪贴板历史？",
+                    message: "已记录的内容会全部删除，该操作不可撤销。"
+                ) {
+                    await environment.clipboard.clearHistory()
+                }
+                ClearHistoryRow(
+                    title: "清空翻译历史…",
+                    confirmTitle: "确定清空全部翻译历史？",
+                    message: "最近 \(TranslationHistory.limit) 条翻译记录会被删除，该操作不可撤销。"
+                ) {
+                    environment.translationHistory.clear()
+                }
+                ClearHistoryRow(
+                    title: "清空计算历史…",
+                    confirmTitle: "确定清空全部计算历史？",
+                    message: "最近 \(CalculationHistory.limit) 条计算记录会被删除，该操作不可撤销。"
+                ) {
+                    environment.calculationHistory.clear()
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private var defaultModuleBinding: Binding<ModuleID?> {
+        Binding(
+            get: { settings.defaultModule },
+            set: { settings.defaultModule = $0 }
+        )
     }
 
     private func binding(for action: HotkeyManager.Action) -> Binding<HotkeyManager.Shortcut?> {
@@ -210,11 +251,48 @@ struct GeneralSettingsView: View {
     private func softHint(for action: HotkeyManager.Action) -> some View {
         if let shortcut = settings.hotkeys[action],
            let hint = HotkeyManager.softConflictHints[shortcut.displayString] {
-            Text("可能冲突：\(hint)")
+            Text("冲突：\(hint)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .help("可能与「\(hint)」冲突")
         } else {
             Text("")
+        }
+    }
+}
+
+/// 通用页里的一行「清空某类历史」：按钮 + 二次确认 + 结果回执。
+private struct ClearHistoryRow: View {
+    let title: String
+    let confirmTitle: String
+    let message: String
+    let action: () async -> Void
+
+    @State private var isConfirming = false
+    @State private var result: String?
+
+    var body: some View {
+        HStack {
+            Button(title) { isConfirming = true }
+            Spacer()
+            if let result {
+                Text(result)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .confirmationDialog(confirmTitle, isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("清空", role: .destructive) {
+                Task {
+                    await action()
+                    result = "已清空"
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(message)
         }
     }
 }
@@ -223,8 +301,6 @@ struct GeneralSettingsView: View {
 
 struct ClipboardSettingsView: View {
     let environment: AppEnvironment
-    @State private var showClearConfirm = false
-    @State private var clearResult: String?
 
     private var settings: SettingsStore { environment.settings }
 
@@ -282,35 +358,12 @@ struct ClipboardSettingsView: View {
                     }
                 }
 
-                Text("超长内容直接跳过（不截断）。调整上限只影响后续写入，不回溯删除已有数据。")
+                Text("超长内容直接跳过（不截断）。调整上限只影响后续写入，不回溯删除已有数据。清空历史在「通用 → 数据」。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            Section("数据") {
-                HStack {
-                    Button("清空历史…") { showClearConfirm = true }
-                    Spacer()
-                    if let clearResult {
-                        Text(clearResult)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
         }
         .formStyle(.grouped)
-        .confirmationDialog("确定清空全部剪贴板历史？", isPresented: $showClearConfirm) {
-            Button("清空", role: .destructive) {
-                Task {
-                    await environment.clipboard.clearHistory()
-                    clearResult = "已清空"
-                }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("该操作不可撤销。")
-        }
     }
 }
 

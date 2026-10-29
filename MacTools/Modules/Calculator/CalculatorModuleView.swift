@@ -27,7 +27,7 @@ struct CalculatorModuleView: View {
     }
 
     private var cardHint: String {
-        controller.mode == .history ? "↩ 回填 · Esc 退出历史" : "↩ 复制并关闭 · ↑ 显示历史"
+        controller.mode == .history ? "↩ 键入结果 · Esc 退出历史" : "↩ 键入结果 · ↑ 显示历史"
     }
 
     // MARK: 编辑

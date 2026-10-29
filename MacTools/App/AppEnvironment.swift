@@ -19,6 +19,7 @@ final class AppEnvironment {
     let clipboardStore: ClipboardStore
     let clipboard: ClipboardController
     let translationService: TranslationService
+    let translationHistory: TranslationHistory
     let translation: TranslationController
     let screenshot: ScreenshotController
     private let clipboardMonitor: ClipboardMonitor
@@ -71,8 +72,14 @@ final class AppEnvironment {
         self.clipboardMonitor = clipboardMonitor
 
         let translationService = TranslationService(database: database, activeEngine: settings.translationEngine)
-        let translation = TranslationController(service: translationService, settings: settings)
+        let translationHistory = TranslationHistory(database: database)
+        let translation = TranslationController(
+            service: translationService,
+            settings: settings,
+            history: translationHistory
+        )
         self.translationService = translationService
+        self.translationHistory = translationHistory
         self.translation = translation
 
         let screenshot = ScreenshotController(settings: settings, permissions: permissions)
@@ -171,6 +178,10 @@ final class AppEnvironment {
     }
 
     func perform(_ action: HotkeyManager.Action) {
+        if let module = action.targetModule {
+            toggleModule(module)
+            return
+        }
         switch action {
         case .toggleHUD:
             router.toggle()
@@ -178,6 +189,17 @@ final class AppEnvironment {
             beginScreenshot()
         case .selectionTranslate:
             beginSelectionTranslate()
+        default:
+            break
+        }
+    }
+
+    /// 直达某功能的热键：已经停在它上面时收起，否则唤起到它。
+    private func toggleModule(_ module: ModuleID) {
+        if router.isVisible, router.currentModule == module {
+            router.close()
+        } else {
+            router.open(at: module)
         }
     }
 

@@ -1,9 +1,13 @@
 import SwiftUI
 import AppKit
 
-/// 独立 NSWindow：760×560，最小 720×520，可 resize，⌘W 关闭。
+/// 独立 NSWindow：固定 680×520，不可缩放（⌘W 关闭）。
+/// 尺寸固定是因为内容按档位排布（快捷键行、滑杆宽度都是定值），
+/// 拉宽只会让控件之间出现大片空白，不如干脆锁死。
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
+
+    private static let contentSize = NSSize(width: 680, height: 520)
 
     private let environment: AppEnvironment
     private var window: NSWindow?
@@ -24,22 +28,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func build(page: SettingsPage) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
+            // 没有 .resizable：窗口尺寸锁死，用户拖不动边框。
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "MacTools 设置"
-        window.minSize = NSSize(width: 720, height: 520)
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
-        window.center()
         window.delegate = self
+
         let hosting = NSHostingView(rootView: SettingsRootView(environment: environment, page: page))
-        hosting.frame = NSRect(x: 0, y: 0, width: 760, height: 560)
+        hosting.frame = NSRect(origin: .zero, size: Self.contentSize)
         hosting.autoresizingMask = [.width, .height]
         window.contentView = hosting
-        window.setContentSize(NSSize(width: 760, height: 560))
+        window.setContentSize(Self.contentSize)
         window.center()
         self.window = window
     }

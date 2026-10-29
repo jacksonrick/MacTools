@@ -13,7 +13,7 @@ enum Log {
 
     #if DEBUG
     /// 进程启动时读一次。
-    nonisolated(unsafe) static let traceEnabled =
+    static let traceEnabled =
         ProcessInfo.processInfo.environment["MACTOOLS_DEBUG_TRACE"] == "1"
 
     static func trace(_ message: @autoclosure () -> String) {

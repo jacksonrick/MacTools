@@ -6,7 +6,16 @@ import Observation
 @MainActor
 final class TranslationController: ModuleControlling {
 
+    enum Mode: Equatable {
+        case editing
+        case history
+    }
+
     let moduleID: ModuleID = .translation
+
+    private(set) var mode: Mode = .editing
+    /// 历史游标：0 = 最新一条，数值越大越旧。
+    private(set) var historyIndex: Int = 0
 
     private(set) var translatedText: String = ""
     private(set) var detectedLanguage: String?
@@ -23,11 +32,13 @@ final class TranslationController: ModuleControlling {
 
     private let service: TranslationService
     private let settings: SettingsStore
+    let history: TranslationHistory
     private var translateTask: Task<Void, Never>?
 
-    init(service: TranslationService, settings: SettingsStore) {
+    init(service: TranslationService, settings: SettingsStore, history: TranslationHistory) {
         self.service = service
         self.settings = settings
+        self.history = history
     }
 
     var activeEngine: TranslationEngineID { service.activeEngine }
@@ -46,16 +57,22 @@ final class TranslationController: ModuleControlling {
     // MARK: - ModuleControlling
 
     func didEnter(router: HUDRouter) {
+        mode = .editing
+        historyIndex = 0
         errorMessage = nil
     }
 
     func didLeave(router: HUDRouter) {
+        mode = .editing
         translateTask?.cancel()
         service.speechService.stop()
         speakingTarget = nil
     }
 
     func didChangeText(_ text: String, router: HUDRouter) {
+        // 打字即回到编辑态：历史只是查看层，不该挡住继续输入。
+        mode = .editing
+        historyIndex = 0
         errorMessage = nil
         if service.speechService.isSpeaking {
             service.speechService.stop()
@@ -69,9 +86,44 @@ final class TranslationController: ModuleControlling {
 
     func handle(_ key: HUDKey, router: HUDRouter) -> Bool {
         switch key {
-        case .enter:
-            translate(router: router)
+        case .arrowUp:
+            if mode == .editing {
+                guard !history.records.isEmpty else { return true }
+                mode = .history
+                historyIndex = 0
+                return true
+            }
+            // 往上 = 更旧；翻到底停住，不回绕。
+            historyIndex = min(historyIndex + 1, max(history.records.count - 1, 0))
             return true
+
+        case .arrowDown:
+            guard mode == .history else { return true }
+            if historyIndex == 0 {
+                mode = .editing
+                return true
+            }
+            historyIndex -= 1
+            return true
+
+        case .enter:
+            if mode == .history {
+                guard history.records.indices.contains(historyIndex) else { return true }
+                let record = history.records[historyIndex]
+                mode = .editing
+                historyIndex = 0
+                // 历史里回车 = 直接把那条译文打进光标处，不回填输入框。
+                PasteService.paste(record.translated, router: router)
+                return true
+            }
+            if canReadTranslation {
+                // 已有译文：回车 = 把译文送进当前光标处（与剪贴板回车同一套动作）。
+                PasteService.paste(translatedText, router: router)
+            } else {
+                translate(router: router)
+            }
+            return true
+
         case .command(let character):
             switch character {
             case "l":
@@ -80,8 +132,15 @@ final class TranslationController: ModuleControlling {
             default:
                 return false
             }
+
         case .escape:
+            if mode == .history {
+                mode = .editing
+                historyIndex = 0
+                return true
+            }
             return false
+
         default:
             return false
         }
@@ -113,6 +172,7 @@ final class TranslationController: ModuleControlling {
                 translatedText = result.translatedText
                 detectedLanguage = result.detectedSourceLanguage
                 isTranslating = false
+                history.add(source: source, translated: result.translatedText, targetLanguage: target)
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? "翻译失败"
@@ -190,6 +250,10 @@ final class TranslationController: ModuleControlling {
     func cycleLanguage(router: HUDRouter) {
         let next = LanguageCatalog.next(after: settings.targetLanguage)
         settings.targetLanguage = next
+        // 目标语言变了，旧译文就不能再用了：清掉，让下一次回车重新翻译而不是把旧语言的
+        // 结果打进光标处。
+        translatedText = ""
+        detectedLanguage = nil
         router.flashStatus("目标语言：\(LanguageCatalog.name(for: next))")
     }
 

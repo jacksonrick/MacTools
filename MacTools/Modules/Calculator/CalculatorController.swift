@@ -65,16 +65,17 @@ final class CalculatorController: ModuleControlling {
                 historyIndex = 0
                 return true
             }
+            // 往上 = 更旧；翻到底停住，不回绕。
+            historyIndex = min(historyIndex + 1, max(history.records.count - 1, 0))
+            return true
+
+        case .arrowDown:
+            guard mode == .history else { return true }
             if historyIndex == 0 {
                 mode = .editing
                 return true
             }
             historyIndex -= 1
-            return true
-
-        case .arrowDown:
-            guard mode == .history else { return true }
-            historyIndex = min(historyIndex + 1, max(history.records.count - 1, 0))
             return true
 
         case .enter:
@@ -83,13 +84,14 @@ final class CalculatorController: ModuleControlling {
                 let record = history.records[historyIndex]
                 mode = .editing
                 historyIndex = 0
-                router.setText(record.expression)
+                // 历史里回车 = 把结果打进光标处，不回填表达式。
+                PasteService.paste(record.result, router: router)
                 return true
             }
             guard let result else { return false }
             history.add(expression: result.expression, result: result.value)
-            PasteService.copy(result.value)
-            router.close()
+            // 回车 = 直接键入到当前光标处（与剪贴板回车同一套：先写剪贴板再合成 ⌘V）。
+            PasteService.paste(result.value, router: router)
             return true
 
         case .escape:

@@ -7,14 +7,27 @@ final class HotkeyManager {
 
     enum Action: String, CaseIterable, Codable, Sendable {
         case toggleHUD
+        case clipboard
+        case calculator
         case screenshot
         case selectionTranslate
 
         var displayName: String {
             switch self {
             case .toggleHUD: "唤起浮窗"
+            case .clipboard: "打开剪贴板"
+            case .calculator: "打开计算器"
             case .screenshot: "截图"
             case .selectionTranslate: "划词翻译"
+            }
+        }
+
+        /// 直达某个功能的入口：默认不绑定，由用户在设置页自行录制。
+        var targetModule: ModuleID? {
+            switch self {
+            case .clipboard: .clipboard
+            case .calculator: .calculator
+            default: nil
             }
         }
     }

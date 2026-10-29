@@ -197,11 +197,83 @@ enum DebugSelfTest {
         expect("恢复普通求值后提示清除", environment.calculator.unsupportedReason == nil)
 
         // 13. 历史模式
+        environment.calculationHistory.add(expression: "1+1", result: "2")
         expect("↑ 进入历史", router.handle(.arrowUp) && environment.calculator.mode == .history)
+        expect("历史游标停在最新一条", environment.calculator.historyIndex == 0)
+        _ = router.handle(.arrowUp)
+        expect("↑ 连按往更旧翻",
+               environment.calculator.mode == .history && environment.calculator.historyIndex == 1)
+        _ = router.handle(.arrowDown)
+        expect("↓ 回到更新一条", environment.calculator.historyIndex == 0)
+
+        // 历史里回车 = 直接键入到光标处，不回填输入框
+        let expressionBeforeHistoryEnter = router.calcExpression
+        _ = router.handle(.enter)
+        await settle(0.35)
+        expect("历史回车不回填输入框", router.calcExpression == expressionBeforeHistoryEnter)
+        expect("历史回车把结果写进剪贴板",
+               NSPasteboard.general.string(forType: .string) == "2")
+
+        router.open(at: .calculator)
+        await settle(0.15)
         expect("Esc 退出历史但不返回扇表",
-               router.handle(.escape)
+               router.handle(.arrowUp)
+               && router.handle(.escape)
                && environment.calculator.mode == .editing
                && router.level == .module(.calculator))
+        _ = router.handle(.escape)
+        await settle(0.3)
+
+        // 13b. 翻译历史：存储层（内存库，不污染真实数据）
+        if let tempDB = try? AppDatabase.inMemory() {
+            let tempTranslation = TranslationHistory(database: tempDB)
+            for index in 0..<12 {
+                tempTranslation.add(
+                    source: "src\(index)",
+                    translated: "dst\(index)",
+                    targetLanguage: "zh-CHS"
+                )
+            }
+            expect("翻译历史上限 10 条", tempTranslation.records.count == 10)
+            expect("翻译历史最新在前", tempTranslation.records.first?.source == "src11")
+            expect("翻译历史淘汰最旧", tempTranslation.records.last?.source == "src2")
+            expect("翻译历史同库可读回",
+                   TranslationHistory(database: tempDB).records.first?.translated == "dst11")
+            tempTranslation.clear()
+            expect("翻译历史可清空", tempTranslation.records.isEmpty)
+        }
+
+        // 13c. 翻译历史的键盘浏览（真实历史为空时只锁「不误入历史」这一侧）
+        router.open(at: .translation)
+        await settle(0.15)
+        if environment.translationHistory.records.isEmpty {
+            expect("历史为空时 ↑ 不进入历史",
+                   router.handle(.arrowUp) && environment.translation.mode == .editing)
+        } else {
+            expect("翻译 ↑ 进入历史", router.handle(.arrowUp) && environment.translation.mode == .history)
+            expect("翻译 Esc 退出历史",
+                   router.handle(.escape)
+                   && environment.translation.mode == .editing
+                   && router.level == .module(.translation))
+        }
+        _ = router.handle(.escape)
+        await settle(0.3)
+
+        // 13d. 唤起时直接进默认功能
+        expect("直达热键映射正确",
+               HotkeyManager.Action.clipboard.targetModule == .clipboard
+               && HotkeyManager.Action.calculator.targetModule == .calculator
+               && HotkeyManager.Action.toggleHUD.targetModule == nil)
+        let originalDefaultModule = environment.settings.defaultModule
+        environment.settings.defaultModule = .clipboard
+        router.open()
+        await settle(0.15)
+        expect("默认功能：唤起直接进剪贴板", router.currentModule == .clipboard)
+        environment.settings.defaultModule = nil
+        router.open()
+        await settle(0.15)
+        expect("默认功能置空：停在工具条", router.level == .bar)
+        environment.settings.defaultModule = originalDefaultModule
         _ = router.handle(.escape)
         await settle(0.3)
 
@@ -308,6 +380,11 @@ enum DebugSelfTest {
         }
 
         if let tempDB = try? AppDatabase.inMemory() {
+            expect("存储上限默认 1000", SettingsStore(database: tempDB).maxClips == 1000)
+            expect("默认快捷键表不含剪贴板 / 计算器",
+                   SettingsStore.defaultShortcuts[.clipboard] == nil
+                   && SettingsStore.defaultShortcuts[.calculator] == nil)
+
             let tempSettings = SettingsStore(database: tempDB)
             tempSettings.setMaxClips(300)
             expect("设置改动立即在内存生效", tempSettings.maxClips == 300)
@@ -338,6 +415,21 @@ enum DebugSelfTest {
             CalculationHistory(database: tempDB).add(expression: "9*9", result: "81")
             expect("计算历史同库可读回",
                    CalculationHistory(database: tempDB).records.first?.expression == "9*9")
+
+            // 默认展示功能
+            tempSettings.defaultModule = .calculator
+            tempSettings.flush()
+            expect("默认展示功能可持久化", SettingsStore(database: tempDB).defaultModule == .calculator)
+            let cleared = SettingsStore(database: tempDB)
+            cleared.defaultModule = nil
+            cleared.flush()
+            expect("默认展示功能可置空", SettingsStore(database: tempDB).defaultModule == nil)
+
+            // 主动清空快捷键后，重启不能把默认值又补回来（值存的是显式 null）
+            tempSettings.hotkeys[.screenshot] = nil
+            tempSettings.flush()
+            expect("清空的快捷键重启后仍是未绑定",
+                   SettingsStore(database: tempDB).hotkeys[.screenshot] == nil)
 
             TranslationService(database: tempDB, activeEngine: .baidu)
                 .save(credentials: TranslateCredentials(appID: "selftest-id", secret: "selftest-key"), for: .baidu)
@@ -729,8 +821,10 @@ enum DebugSelfTest {
         let contentSize = settingsWindow?.contentView?.bounds.size ?? .zero
         print("   · 设置窗口内容尺寸 = \(contentSize)")
         // 自绘左右布局：没有 NavigationSplitView 的工具栏，内容尺寸严格等于名义尺寸。
-        expect("设置窗口内容尺寸 ≈760×560",
-               abs(contentSize.width - 760) < 2 && abs(contentSize.height - 560) < 2)
+        expect("设置窗口内容尺寸 ≈680×520",
+               abs(contentSize.width - 680) < 2 && abs(contentSize.height - 520) < 2)
+        expect("设置窗口不可缩放",
+               settingsWindow?.styleMask.contains(.resizable) == false)
 
         // 应用内快捷键互斥
         var conflictRejected = false

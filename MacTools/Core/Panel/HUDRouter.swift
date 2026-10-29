@@ -230,8 +230,13 @@ final class HUDRouter {
         dismissTask?.cancel()
         isDismissing = false
         keywordBuffer = ""
-        level = .bar
-        textToken += 1
+        // 设置里指定了默认功能就直接进去；否则停在工具条（Spotlight 式空态）。
+        if let module = settings?.defaultModule {
+            enter(module, seed: nil)
+        } else {
+            level = .bar
+            textToken += 1
+        }
         showPanel()
     }
 

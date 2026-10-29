@@ -11,23 +11,76 @@ struct TranslationModuleView: View {
         ModuleCard(
             height: Self.cardHeight,
             status: cardStatus,
-            hint: "↩ 翻译 · ⌘L 切换语言 · Esc 返回",
+            hint: cardHint,
             alert: router.statusMessage != nil
         ) {
-            VStack(spacing: 10) {
-                sourceBlock
-                translatedBlock
+            if controller.mode == .history {
+                historyList
+            } else {
+                VStack(spacing: 10) {
+                    sourceBlock
+                    translatedBlock
+                }
             }
         }
     }
 
     private var cardStatus: String {
         if let message = router.statusMessage { return message }
+        if controller.mode == .history { return "翻译历史 · 最多 \(TranslationHistory.limit) 条" }
         if controller.isTranslating { return "翻译中…" }
         if let error = controller.errorMessage { return error }
         if !controller.isConfigured { return "未配置翻译引擎" }
         if let detected = controller.detectedLanguage { return "已翻译 · 识别为 \(detected)" }
         return "\(controller.activeEngine.displayName) → \(LanguageCatalog.name(for: controller.targetLanguage))"
+    }
+
+    private var cardHint: String {
+        if controller.mode == .history { return "↩ 键入译文 · Esc 退出历史" }
+        if controller.canReadTranslation { return "↩ 键入译文 · ↑ 历史 · ⌘L 切换语言" }
+        return "↩ 翻译 · ↑ 历史 · ⌘L 切换语言 · Esc 返回"
+    }
+
+    // MARK: 历史
+
+    private var historyList: some View {
+        Group {
+            if controller.history.records.isEmpty {
+                Text("暂无历史")
+                    .font(Typography.hint)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(Array(controller.history.records.enumerated()), id: \.element.id) { index, record in
+                            historyRow(record: record, selected: index == controller.historyIndex)
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
+        }
+    }
+
+    private func historyRow(record: TranslationRecord, selected: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(record.source)
+                .font(Typography.listRow)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(record.translated)
+                .font(Typography.listMeta)
+                .foregroundStyle(selected ? Color.accentColor : .secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 46)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.03))
+        }
     }
 
     // MARK: 原文
